@@ -1,11 +1,11 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 import os
 import io
 import re
 import sys
-from PyPDF2 import PdfFileReader as reader,PdfFileWriter as writer
+from PyPDF2 import PdfFileReader as reader, PdfFileWriter as writer
 from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
@@ -17,6 +17,7 @@ from pdfminer.pdfpage import PDFPage
 
 pdfFilePath = r'./rfc.pdf'
 
+
 class PDFHandleMode(object):
     # 保留源PDF文件的所有内容和信息，在此基础上修改
     COPY = 'copy'
@@ -24,12 +25,12 @@ class PDFHandleMode(object):
     NEWLY = 'newly'
 
 
-
 class RFCPDFHandler(object):
     '''
     封装的PDF文件处理类
     '''
-    def __init__(self, pdfFilePath, mode = PDFHandleMode.COPY):
+
+    def __init__(self, pdfFilePath, mode=PDFHandleMode.COPY):
         '''
         用一个PDF文件初始化
 
@@ -47,6 +48,7 @@ class RFCPDFHandler(object):
         self.doc_info = self.__pdf.getDocumentInfo()
         #
         self.pages_num = self.__pdf.getNumPages()
+        self.parent_bookmark = None
 
         # 可写的PDF对象，根据不同的模式进行初始化
         self.__writeable_pdf = writer()
@@ -57,8 +59,7 @@ class RFCPDFHandler(object):
                 page = self.__pdf.getPage(idx)
                 self.__writeable_pdf.insertPage(page, idx)
 
-
-    def save2file(self,newFileName):
+    def save2file(self, newFileName):
         '''
         将修改后的PDF保存成文件
         :param newFileName: 新文件名，不要和原文件名相同
@@ -69,8 +70,7 @@ class RFCPDFHandler(object):
             self.__writeable_pdf.write(fout)
         print('save2file success! new file is: {0}'.format(newFileName))
 
-
-    def add_one_bookmark(self, title, page, parent = None, color = None, fit = '/Fit'):
+    def add_one_bookmark(self, title, page, parent=None, color=None, fit='/Fit'):
         '''
         往PDF文件中添加单条书签，并且保存为一个新的PDF文件
 
@@ -83,9 +83,14 @@ class RFCPDFHandler(object):
         :return: None
         '''
         # 为了防止乱码，这里对title进行utf-8编码
-        self.__writeable_pdf.addBookmark(title.encode().decode('utf-8'),page - 1,parent = parent,color = color,fit = fit)
+        # python3 默认是utf-8编码，不需要进行转换
+        #self.__writeable_pdf.addBookmark(title.encode().decode('utf-8'),page - 1,parent = parent,color = color,fit = fit)
+        bookmark = self.__writeable_pdf.addBookmark(
+            title.lstrip(), page - 1, parent=parent, color=color, fit=fit)
+        # rfc 父标题以3个空格开头，子标题以6个空格开头。 如果当前不是标题不是6个空格，则说明是父标题。
+        if title[0:6] != "      ":
+            self.parent_bookmark = bookmark
         print('add_one_bookmark success! bookmark title is: {0}'.format(title))
-
 
     def add_bookmarks_to_rfc_pdf(self, bookmarks):
         '''
@@ -94,11 +99,15 @@ class RFCPDFHandler(object):
         :return: None
         '''
         for title, page in bookmarks:
-            self.add_one_bookmark(title, page)
-        print('add_bookmarks_to_rfc_pdf success! add {0} pieces of bookmarks to PDF file'.format(len(bookmarks)))
+            # rfc 父标题以3个空格开头，子标题以6个空格开头。 如果当前不是标题不是6个空格，则说明是父标题。
+            # 父标题的parent_bookmark设置为None
+            if title[0:6] != "      ":
+                self.parent_bookmark = None
+            self.add_one_bookmark(title, page, parent=self.parent_bookmark)
+        print('add_bookmarks_to_rfc_pdf success! add {0} pieces of bookmarks to PDF file'.format(
+            len(bookmarks)))
 
-
-    def read_bookmarks_from_txt(self,txt_file_path, page_offset = 0):
+    def read_bookmarks_from_txt(self, txt_file_path, page_offset=0):
         '''
         从文本文件中读取书签列表
         文本文件有若干行，每行一个书签，内容格式为：
@@ -109,7 +118,7 @@ class RFCPDFHandler(object):
         :return: 书签列表
         '''
         bookmarks = []
-        with open(txt_file_path,'r') as fin:
+        with open(txt_file_path, 'r') as fin:
             for line in fin:
                 line = line.rstrip()
                 if not line:
@@ -133,8 +142,7 @@ class RFCPDFHandler(object):
 
         return bookmarks
 
-
-    def get_rfc_pdf_catalogue(self, pdfFilePath, page_offset = 0):
+    def get_rfc_pdf_catalogue(self, pdfFilePath, page_offset=0):
         '''读取RFC文档中的目录，得到目录列表。'''
         fp = open(pdfFilePath, 'rb')  # 以二进制读模式打开文件
         # 用文件对象来创建一个pdf文档分析器
@@ -157,9 +165,9 @@ class RFCPDFHandler(object):
             interpreter = PDFPageInterpreter(rsrcmgr, device)
 
             bookmarks = []
-            
+
             # 循环遍历列表，每次处理一个page的内容
-            for page in PDFPage.create_pages(doc): # 生成page列表
+            for page in PDFPage.create_pages(doc):  # 生成page列表
                 interpreter.process_page(page)
                 # 接受该页面的LTPage对象
                 layout = device.get_result()
@@ -190,7 +198,7 @@ class RFCPDFHandler(object):
 
             return bookmarks
 
-    def add_bookmarks_by_get_catalog_from_pdf(self, pdfFilePath, page_offset = 0):
+    def add_bookmarks_by_get_catalog_from_pdf(self, pdfFilePath, page_offset=0):
         '''
         通过读取RFC pdf目录列表信息，将书签批量添加到PDF文件中
 

@@ -4,7 +4,7 @@
 
 # 使用方法
 
-需要先安装python2。
+需要先安装python3以及PyPDF2，pdfminer两个包。
 ```
 $ python add_bookmarks_to_pdf.py foo.pdf
 ```
